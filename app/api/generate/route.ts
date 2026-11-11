@@ -6,7 +6,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'GEMINI_API_KEY is not set' }, { status: 500 });
     }
 
-    const { letter, category, language } = await req.json();
+    const { letter, category } = await req.json();
 
     if (!letter || !category) {
       return NextResponse.json({ error: 'Missing letter or category' }, { status: 400 });
@@ -66,8 +66,9 @@ IMPORTANT REQUIREMENTS:
     const result = JSON.parse(jsonText);
     return NextResponse.json(result);
 
-  } catch (error: any) {
-    console.error('Error generating question:', error);
-    return NextResponse.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
+  } catch (error) {
+    const err = error as Error;
+    console.error('Error generating question:', err);
+    return NextResponse.json({ error: err.message || 'Internal Server Error' }, { status: 500 });
   }
 }

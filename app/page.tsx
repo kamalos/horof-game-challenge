@@ -3,7 +3,7 @@ import Link from 'next/link';
 export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <h1 className="text-5xl font-black text-gray-900 mb-2text-center text-center">
+      <h1 className="text-5xl font-black text-gray-900 mb-2 text-center">
         Beehive Letter Game
       </h1>
       <p className="text-xl text-gray-500 mb-12 text-center max-w-lg">

@@ -41,9 +41,9 @@ export const JokerButton: React.FC<JokerButtonProps> = ({
     setShowModal(false);
   };
 
-  const bgColor = team === 'red' ? 'bg-[#F3722C]' : 'bg-[#4CAF50]';
-  const hoverColor = team === 'red' ? 'active:bg-orange-700' : 'active:bg-green-700';
-  const textColor = team === 'red' ? 'text-[#F3722C]' : 'text-[#4CAF50]';
+  const bgColor = team === 'red' ? 'bg-[#981f28]' : 'bg-[#5250fc]';
+  const hoverColor = team === 'red' ? 'active:bg-red-800' : 'active:bg-indigo-800';
+  const textColor = team === 'red' ? 'text-[#981f28]' : 'text-[#5250fc]';
 
   return (
     <>

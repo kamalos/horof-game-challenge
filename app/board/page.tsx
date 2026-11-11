@@ -2,13 +2,16 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '@/lib/socket';
-import { useGameStore, Team } from '@/lib/gameState';
+import { useGameStore } from '@/lib/gameState';
 import { HexGrid } from '@/components/HexGrid';
 import { WinnerBanner } from '@/components/WinnerBanner';
+import { sounds } from '@/lib/audio';
+import { Zap, Volume2, VolumeX } from 'lucide-react';
 
 export default function BoardPage() {
   const { socket, connected } = useSocket();
   const store = useGameStore();
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     if (!socket || !connected) return;
@@ -23,6 +26,14 @@ export default function BoardPage() {
       store.setWinner(team, winningPath);
     });
 
+    socket.on('buzzer-buzz', () => {
+      sounds.playBuzzer();
+    });
+
+    socket.on('buzzer-update', (update) => {
+      store.updateBuzzer(update);
+    });
+
     socket.on('game-reset', () => {
       store.reset();
     });
@@ -30,13 +41,23 @@ export default function BoardPage() {
     return () => {
       socket.off('state-update');
       socket.off('show-winner');
+      socket.off('buzzer-buzz');
+      socket.off('buzzer-update');
       socket.off('game-reset');
     };
-  }, [socket, connected, store.applyStateUpdate, store.setWinner, store.reset]);
+  }, [socket, connected, store.applyStateUpdate, store.setWinner, store.updateBuzzer, store.reset]);
+
+  const toggleMute = () => {
+    const nextMuted = !muted;
+    setMuted(nextMuted);
+    sounds.setMuted(nextMuted);
+  };
 
   const resetGame = () => {
     socket?.emit('game-reset', { keepLetters: false });
   };
+
+  const buzzedTeam = store.buzzerState?.buzzedTeam;
 
   if (store.showSplash) {
     return (
@@ -44,11 +65,15 @@ export default function BoardPage() {
         <div
           className="absolute inset-0 z-0 opacity-100"
           style={{
-            background: 'conic-gradient(from 310.9deg at 50% 50%, #4CAF50 0deg 98.2deg, #F3722C 98.2deg 180deg, #4CAF50 180deg 278.2deg, #F3722C 278.2deg 360deg)'
+            background:
+              'conic-gradient(from 310.9deg at 50% 50%, #5250fc 0deg 98.2deg, #981f28 98.2deg 180deg, #5250fc 180deg 278.2deg, #981f28 278.2deg 360deg)',
           }}
-        >
-        </div>
-        <img src="/logo.png" alt="Logo" className="h-[60vh] object-contain z-10 drop-shadow-[0_0_40px_rgba(255,255,255,0.4)]" />
+        ></div>
+        <img
+          src="/logo.png"
+          alt="Logo"
+          className="h-[60vh] object-contain z-10 drop-shadow-[0_0_40px_rgba(255,255,255,0.4)]"
+        />
       </div>
     );
   }
@@ -59,52 +84,94 @@ export default function BoardPage() {
       <div
         className="absolute inset-0 z-0 opacity-100"
         style={{
-          background: 'conic-gradient(from 310.9deg at 50% 50%, #4CAF50 0deg 98.2deg, #F3722C 98.2deg 180deg, #4CAF50 180deg 278.2deg, #F3722C 278.2deg 360deg)'
+          background:
+            'conic-gradient(from 310.9deg at 50% 50%, #5250fc 0deg 98.2deg, #981f28 98.2deg 180deg, #5250fc 180deg 278.2deg, #981f28 278.2deg 360deg)',
         }}
-      >
-      </div>
+      ></div>
 
       {/* Header / Scoreboard */}
       <header className="absolute top-0 left-0 w-full flex justify-between items-start p-8 z-20 pointer-events-none">
+        {/* Red Team */}
         <div className="flex flex-col items-start gap-2">
-          <h2 className="text-5xl font-black text-white tracking-wider drop-shadow-lg px-6 py-2 rounded-xl bg-[#F3722C] shadow-[0_0_15px_#F3722C]">
+          <h2
+            className={`text-5xl font-black text-white tracking-wider drop-shadow-lg px-6 py-2 rounded-xl bg-[#981f28] transition-all duration-300 ${
+              buzzedTeam === 'red'
+                ? 'scale-110 shadow-[0_0_40px_#981f28] ring-4 ring-white animate-pulse'
+                : 'shadow-[0_0_15px_#981f28]'
+            }`}
+          >
             {store.teamNames.red}
           </h2>
           <div className="flex items-center gap-2">
             <span className="text-white font-bold text-xl uppercase">Joker:</span>
             <div
-              className={`w-4 h-4 rounded-full ${store.jokerStatus.red ? 'bg-[#F4D03F] shadow-[0_0_10px_#F4D03F]' : 'bg-gray-600'
-                }`}
+              className={`w-4 h-4 rounded-full ${
+                store.jokerStatus.red ? 'bg-[#F4D03F] shadow-[0_0_10px_#F4D03F]' : 'bg-gray-600'
+              }`}
             />
           </div>
         </div>
 
-        <div className="flex flex-col items-center justify-center -mt-6">
-          {/* <img
-            src="/logo.png"
-            alt="حروف مع كمال"
-            className="h-24 md:h-36 object-contain drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] z-20"
-          /> */}
-          {!connected && (
+        {/* Center Buzzer Alert Banner / Status */}
+        <div className="flex flex-col items-center justify-center pointer-events-auto">
+          {buzzedTeam ? (
+            <div
+              className={`flex items-center gap-3 px-8 py-3 rounded-2xl shadow-2xl animate-bounce border-2 border-white transition-all ${
+                buzzedTeam === 'red'
+                  ? 'bg-[#981f28] text-white shadow-[0_0_50px_#981f28]'
+                  : 'bg-[#5250fc] text-white shadow-[0_0_50px_#5250fc]'
+              }`}
+            >
+              <Zap className="w-8 h-8 text-yellow-300 fill-yellow-300" />
+              <div className="text-center">
+                <span className="text-xs uppercase tracking-widest font-black text-yellow-200 block">
+                  BUZZ!
+                </span>
+                <span className="text-2xl md:text-3xl font-black drop-shadow-md">
+                  {store.teamNames[buzzedTeam]}
+                </span>
+              </div>
+              <Zap className="w-8 h-8 text-yellow-300 fill-yellow-300" />
+            </div>
+          ) : !connected ? (
             <div className="text-white font-bold tracking-widest text-sm opacity-50 mt-2">
               CONNECTING...
             </div>
-          )}
+          ) : null}
         </div>
 
+        {/* Blue Team */}
         <div className="flex flex-col items-end gap-2">
-          <h2 className="text-5xl font-black text-white tracking-wider drop-shadow-lg px-6 py-2 rounded-xl bg-[#4CAF50] shadow-[0_0_15px_#4CAF50]">
+          <h2
+            className={`text-5xl font-black text-white tracking-wider drop-shadow-lg px-6 py-2 rounded-xl bg-[#5250fc] transition-all duration-300 ${
+              buzzedTeam === 'blue'
+                ? 'scale-110 shadow-[0_0_40px_#5250fc] ring-4 ring-white animate-pulse'
+                : 'shadow-[0_0_15px_#5250fc]'
+            }`}
+          >
             {store.teamNames.blue}
           </h2>
           <div className="flex items-center gap-2">
             <span className="text-white font-bold text-xl uppercase">Joker:</span>
             <div
-              className={`w-4 h-4 rounded-full ${store.jokerStatus.blue ? 'bg-[#F4D03F] shadow-[0_0_10px_#F4D03F]' : 'bg-gray-600'
-                }`}
+              className={`w-4 h-4 rounded-full ${
+                store.jokerStatus.blue ? 'bg-[#F4D03F] shadow-[0_0_10px_#F4D03F]' : 'bg-gray-600'
+              }`}
             />
           </div>
         </div>
       </header>
+
+      {/* Floating Mute Button on Board in Corner */}
+      <div className="absolute bottom-4 right-4 z-30">
+        <button
+          onClick={toggleMute}
+          className="p-3 bg-black/40 hover:bg-black/60 text-white/70 hover:text-white rounded-full backdrop-blur-sm transition-all"
+          title={muted ? 'Unmute Sound' : 'Mute Sound'}
+        >
+          {muted ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
+        </button>
+      </div>
 
       {/* Hex Grid */}
       <main className="flex-1 flex items-center justify-center p-8 z-10">

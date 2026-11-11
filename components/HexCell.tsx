@@ -15,7 +15,6 @@ interface HexCellProps {
 }
 
 export const HexCell: React.FC<HexCellProps> = ({
-  id,
   letter,
   owner,
   isActive,
@@ -35,13 +34,13 @@ export const HexCell: React.FC<HexCellProps> = ({
   let stroke = '#5B2C6F';
 
   if (owner === 'red') {
-    fill = '#F3722C';
+    fill = '#981f28';
     textColor = '#FFFFFF';
-    stroke = isWinningPath ? '#FFFFFF' : '#F3722C';
+    stroke = isWinningPath ? '#FFFFFF' : '#981f28';
   } else if (owner === 'blue') {
-    fill = '#4CAF50';
+    fill = '#5250fc';
     textColor = '#FFFFFF';
-    stroke = isWinningPath ? '#FFFFFF' : '#4CAF50';
+    stroke = isWinningPath ? '#FFFFFF' : '#5250fc';
   }
 
   return (

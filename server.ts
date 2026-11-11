@@ -1,6 +1,7 @@
 import { createServer } from 'http';
 import { parse } from 'url';
 import { networkInterfaces } from 'os';
+import { randomBytes } from 'crypto';
 import next from 'next';
 import { Server, Socket } from 'socket.io';
 import { getRandomLetters, Language } from './lib/hexLayout';
@@ -17,19 +18,79 @@ function getLocalIPs(): { ip: string, name: string }[] {
       }
     }
   }
+
+  // Prioritize physical Wi-Fi / WLAN adapters first, then physical Ethernet, and deprioritize virtual/hyper-v adapters
+  results.sort((a, b) => {
+    const isVirtualA = /vethernet|vmware|vmnet|virtual|loopback|pseudo/i.test(a.name);
+    const isVirtualB = /vethernet|vmware|vmnet|virtual|loopback|pseudo/i.test(b.name);
+    const isWifiA = /wi-?fi|wlan|wireless/i.test(a.name) && !isVirtualA;
+    const isWifiB = /wi-?fi|wlan|wireless/i.test(b.name) && !isVirtualB;
+    const isEthA = /eth|lan/i.test(a.name) && !isVirtualA;
+    const isEthB = /eth|lan/i.test(b.name) && !isVirtualB;
+
+    if (isWifiA && !isWifiB) return -1;
+    if (!isWifiA && isWifiB) return 1;
+    if (isEthA && !isEthB) return -1;
+    if (!isEthA && isEthB) return 1;
+    if (!isVirtualA && isVirtualB) return -1;
+    if (isVirtualA && !isVirtualB) return 1;
+    return 0;
+  });
+
   return results;
+}
+
+function generateSecureToken(): string {
+  return randomBytes(16).toString('hex');
 }
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
+// Buzzer State
+interface BuzzerState {
+  enabled: boolean;
+  buzzedTeam: Team | null;
+  buzzedAt: number | null;
+  tokens: { red: string; blue: string };
+  connectedDevices: { red: boolean; blue: boolean };
+}
+
+let buzzerState: BuzzerState = {
+  enabled: true,
+  buzzedTeam: null,
+  buzzedAt: null,
+  tokens: {
+    red: generateSecureToken(),
+    blue: generateSecureToken(),
+  },
+  connectedDevices: {
+    red: false,
+    blue: false,
+  },
+};
+
+function regenerateBuzzerTokens() {
+  buzzerState.tokens = {
+    red: generateSecureToken(),
+    blue: generateSecureToken(),
+  };
+  buzzerState.buzzedTeam = null;
+  buzzerState.buzzedAt = null;
+  buzzerState.enabled = true;
+  buzzerState.connectedDevices = {
+    red: false,
+    blue: false,
+  };
+}
+
 // Game State in Memory
 let hexOwnership: Record<string, Team | null> = {};
 let hexLetters = getRandomLetters();
 let activeHexId: string | null = null;
 let jokerStatus = { red: true, blue: true };
-let teamNames = { red: 'Team ORANGE', blue: 'Team GREEN' };
+let teamNames = { red: 'Team RED', blue: 'Team BLUE' };
 let winner: Team | null = null;
 let winningPath: string[] = [];
 let language: Language = 'ar';
@@ -42,6 +103,7 @@ function resetGameState() {
   jokerStatus = { red: true, blue: true };
   winner = null;
   winningPath = [];
+  regenerateBuzzerTokens();
 }
 
 app.prepare().then(() => {
@@ -49,6 +111,14 @@ app.prepare().then(() => {
     try {
       const parsedUrl = parse(req.url!, true);
       const { pathname, query } = parsedUrl;
+
+      // Network IPs endpoint for QR code host configuration
+      if (pathname === '/api/network-ips' && req.method === 'GET') {
+        res.setHeader('Content-Type', 'application/json');
+        res.statusCode = 200;
+        res.end(JSON.stringify(getLocalIPs()));
+        return;
+      }
 
       // Simple REST API Routing
       if (pathname === '/api/questions') {
@@ -146,10 +216,119 @@ app.prepare().then(() => {
         winningPath,
         language,
         showSplash,
+        buzzerState,
+        localIPs: getLocalIPs(),
       });
       if (winner) {
         socket.emit('show-winner', { team: winner, winningPath });
       }
+    });
+
+    // Buzzer Authentication for mobile client
+    socket.on('buzzer-auth', ({ team, token }: { team: Team; token: string }) => {
+      const isValid = (team === 'red' || team === 'blue') && buzzerState.tokens[team] === token;
+      if (!isValid) {
+        socket.emit('buzzer-auth-result', {
+          valid: false,
+          message: 'This QR code is expired or invalid for this game session. Please scan the latest QR code from the presenter screen.',
+        });
+        return;
+      }
+
+      socket.data.team = team;
+      socket.data.token = token;
+      socket.join(`buzzer-${team}`);
+      buzzerState.connectedDevices[team] = true;
+
+      socket.emit('buzzer-auth-result', {
+        valid: true,
+        team,
+        teamName: teamNames[team],
+        buzzerState: {
+          enabled: buzzerState.enabled,
+          buzzedTeam: buzzerState.buzzedTeam,
+          buzzedAt: buzzerState.buzzedAt,
+        },
+      });
+
+      // Broadcast device connection status to presenter & board
+      io.emit('buzzer-device-status', buzzerState.connectedDevices);
+      io.emit('state-update', { buzzerState });
+    });
+
+    // Buzzer Press event from mobile client
+    socket.on('buzzer-press', ({ team, token }: { team: Team; token: string }) => {
+      // Validate credentials
+      if (!team || buzzerState.tokens[team] !== token) {
+        socket.emit('buzzer-error', { message: 'Invalid or expired token.' });
+        return;
+      }
+
+      // Check if buzzers are enabled and not already buzzed
+      if (!buzzerState.enabled || buzzerState.buzzedTeam !== null) {
+        return;
+      }
+
+      // First valid buzz locks the buzzer
+      buzzerState.buzzedTeam = team;
+      buzzerState.buzzedAt = Date.now();
+      buzzerState.enabled = false;
+
+      // Broadcast buzz event to everyone
+      io.emit('buzzer-buzz', {
+        team,
+        teamName: teamNames[team],
+        timestamp: buzzerState.buzzedAt,
+      });
+
+      io.emit('buzzer-update', {
+        enabled: buzzerState.enabled,
+        buzzedTeam: buzzerState.buzzedTeam,
+        buzzedAt: buzzerState.buzzedAt,
+      });
+
+      io.emit('state-update', { buzzerState });
+    });
+
+    // Presenter resets the buzzers
+    socket.on('buzzer-reset', () => {
+      buzzerState.buzzedTeam = null;
+      buzzerState.buzzedAt = null;
+      buzzerState.enabled = true;
+
+      io.emit('buzzer-update', {
+        enabled: buzzerState.enabled,
+        buzzedTeam: null,
+        buzzedAt: null,
+      });
+      io.emit('buzzer-reset');
+      io.emit('state-update', { buzzerState });
+    });
+
+    // Presenter toggles buzzer lock
+    socket.on('buzzer-toggle-lock', (forceState?: boolean) => {
+      buzzerState.enabled = forceState !== undefined ? forceState : !buzzerState.enabled;
+      io.emit('buzzer-update', {
+        enabled: buzzerState.enabled,
+        buzzedTeam: buzzerState.buzzedTeam,
+        buzzedAt: buzzerState.buzzedAt,
+      });
+      io.emit('state-update', { buzzerState });
+    });
+
+    // Presenter regenerates buzzer QR tokens for a new game or security refresh
+    socket.on('buzzer-regenerate', () => {
+      regenerateBuzzerTokens();
+      // Notify all connected buzzers that old tokens are now invalid
+      io.emit('buzzer-invalidated');
+      io.emit('buzzer-tokens-updated', buzzerState.tokens);
+      io.emit('buzzer-device-status', buzzerState.connectedDevices);
+      io.emit('buzzer-update', {
+        enabled: buzzerState.enabled,
+        buzzedTeam: null,
+        buzzedAt: null,
+      });
+      io.emit('state-update', { buzzerState });
     });
 
     socket.on('hex-claimed', ({ hexId, team }: { hexId: string; team: Team }) => {
@@ -215,6 +394,8 @@ app.prepare().then(() => {
       if (options?.keepLetters) {
         hexLetters = oldLetters;
       }
+      // Broadcast that previous buzzer sessions are invalidated for the new game
+      io.emit('buzzer-invalidated');
       io.emit('game-reset');
       io.emit('state-update', {
         hexOwnership,
@@ -224,7 +405,21 @@ app.prepare().then(() => {
         teamNames,
         winner,
         winningPath,
+        buzzerState,
+        localIPs: getLocalIPs(),
       });
+    });
+
+    socket.on('disconnect', () => {
+      const team = socket.data?.team as Team | undefined;
+      if (team && (team === 'red' || team === 'blue')) {
+        const room = io.sockets.adapter.rooms.get(`buzzer-${team}`);
+        if (!room || room.size === 0) {
+          buzzerState.connectedDevices[team] = false;
+          io.emit('buzzer-device-status', buzzerState.connectedDevices);
+          io.emit('state-update', { buzzerState });
+        }
+      }
     });
   });
 

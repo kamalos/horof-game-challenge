@@ -10,6 +10,7 @@ interface QuestionCardProps {
   teamNames: { red: string; blue: string };
   onGenerateAI?: () => void;
   isGeneratingAI?: boolean;
+  buzzedTeam?: Team | null;
 }
 
 export const QuestionCard: React.FC<QuestionCardProps> = ({
@@ -20,6 +21,7 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
   teamNames,
   onGenerateAI,
   isGeneratingAI,
+  buzzedTeam,
 }) => {
   const [showAnswer, setShowAnswer] = useState(false);
 
@@ -120,15 +122,29 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
           <div className="grid grid-cols-2 gap-4">
             <button
               onClick={() => onAward('red')}
-              className="py-4 bg-[#F3722C] text-white font-bold rounded-lg text-xl active:bg-orange-700"
+              className={`py-4 bg-[#981f28] text-white font-bold rounded-lg text-xl active:bg-red-800 transition-all ${
+                buzzedTeam === 'red' ? 'ring-4 ring-yellow-400 shadow-[0_0_20px_#981f28] scale-105' : ''
+              }`}
             >
               Award {teamNames.red}
+              {buzzedTeam === 'red' && (
+                <span className="block text-xs uppercase text-yellow-200 mt-1 font-black">
+                  ⚡ Buzzed In!
+                </span>
+              )}
             </button>
             <button
               onClick={() => onAward('blue')}
-              className="py-4 bg-[#4CAF50] text-white font-bold rounded-lg text-xl active:bg-green-700"
+              className={`py-4 bg-[#5250fc] text-white font-bold rounded-lg text-xl active:bg-indigo-800 transition-all ${
+                buzzedTeam === 'blue' ? 'ring-4 ring-yellow-400 shadow-[0_0_20px_#5250fc] scale-105' : ''
+              }`}
             >
               Award {teamNames.blue}
+              {buzzedTeam === 'blue' && (
+                <span className="block text-xs uppercase text-yellow-200 mt-1 font-black">
+                  ⚡ Buzzed In!
+                </span>
+              )}
             </button>
           </div>
           <button

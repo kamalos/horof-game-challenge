@@ -17,7 +17,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ winner, teamNames, o
 
     const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
 
-    const interval: any = setInterval(function () {
+    const interval = setInterval(function () {
       const timeLeft = animationEnd - Date.now();
 
       if (timeLeft <= 0) {
@@ -29,13 +29,13 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ winner, teamNames, o
         ...defaults,
         particleCount,
         origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
-        colors: winner === 'red' ? ['#F3722C', '#F4D03F'] : ['#4CAF50', '#F4D03F'],
+        colors: winner === 'red' ? ['#981f28', '#F4D03F'] : ['#5250fc', '#F4D03F'],
       });
       confetti({
         ...defaults,
         particleCount,
         origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
-        colors: winner === 'red' ? ['#F3722C', '#F4D03F'] : ['#4CAF50', '#F4D03F'],
+        colors: winner === 'red' ? ['#981f28', '#F4D03F'] : ['#5250fc', '#F4D03F'],
       });
     }, 250);
 
@@ -43,7 +43,7 @@ export const WinnerBanner: React.FC<WinnerBannerProps> = ({ winner, teamNames, o
   }, [winner]);
 
   const winnerName = winner === 'red' ? teamNames.red : teamNames.blue;
-  const bgColor = winner === 'red' ? 'bg-[#F3722C]/90' : 'bg-[#4CAF50]/90';
+  const bgColor = winner === 'red' ? 'bg-[#981f28]/90' : 'bg-[#5250fc]/90';
 
   return (
     <motion.div

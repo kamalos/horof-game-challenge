@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useSocket } from '@/lib/socket';
-import { useGameStore, Team } from '@/lib/gameState';
+import { useGameStore } from '@/lib/gameState';
 import { Question } from '@/lib/questions';
 import { HexGrid } from '@/components/HexGrid';
 import { v4 as uuidv4 } from 'uuid';
@@ -67,6 +67,8 @@ export default function AdminPage() {
 
     socket.on('hex-claimed', ({ hexId, team }) => addLog(`${team} claimed hex ${hexId}`));
     socket.on('joker-used', ({ team }) => addLog(`${team} used joker`));
+    socket.on('buzzer-buzz', ({ team, teamName }) => addLog(`⚡ ${teamName || team} buzzed in!`));
+    socket.on('buzzer-reset', () => addLog('Buzzers were reset'));
     socket.on('show-winner', ({ team }) => addLog(`${team} wins the game!`));
     socket.on('game-reset', () => addLog(`Game was reset`));
 
@@ -74,6 +76,8 @@ export default function AdminPage() {
       socket.off('state-update');
       socket.off('hex-claimed');
       socket.off('joker-used');
+      socket.off('buzzer-buzz');
+      socket.off('buzzer-reset');
       socket.off('show-winner');
       socket.off('game-reset');
     };
@@ -166,7 +170,7 @@ export default function AdminPage() {
       setImportSummary(`Successfully imported ${added} questions.`);
       setImportJson('');
       fetchQuestions();
-    } catch (err) {
+    } catch {
       setImportSummary(`Import failed: Invalid JSON format.`);
     }
   };
